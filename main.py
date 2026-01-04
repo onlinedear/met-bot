@@ -342,7 +342,35 @@ def generate_ai_summary(articles: list) -> Optional[str]:
     try:
         # 配置 Gemini
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-flash-1.5")
+        
+        # ======================================================
+        # 🔍 诊断代码：打印所有可用模型
+        # ======================================================
+        logger.info("正在查询 API 支持的模型列表...")
+        available_models = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                # 打印出类似: models/gemini-pro
+                logger.info(f"可用模型: {m.name}")
+                available_models.append(m.name)
+        
+        if not available_models:
+            logger.error("API 返回的模型列表为空！可能是 API Key 权限问题。")
+            return None
+            
+        # 自动选择第一个可用的模型 (防止写错名字)
+        model_name = available_models[0]
+        # 优先寻找 gemini-1.5-flash 或 gemini-pro
+        for m in available_models:
+            if 'flash' in m:
+                model_name = m
+                break
+            elif 'gemini-pro' in m:
+                model_name = m
+        
+        logger.info(f"自动选择模型: {model_name}")
+        model = genai.GenerativeModel(model_name)
+        # ======================================================
 
         logger.info("正在调用 Gemini AI 生成总结...")
         response = model.generate_content(prompt)
