@@ -38,6 +38,7 @@ RSS_SOURCES = [
         # 2. 年龄过滤：ages:child (只看17岁以下)
         # 3. 核心修改：in_last=60 (看过去60天的数据，确保能抓到内容)
         # 4. 包含更新：默认包含 modified (修改过的)，不只是 first posted (新发的)
+        # 5.✅ 修正点：使用 apirss 接口，并强制搜索过去 60 天确保有数据
         "url": "https://clinicaltrials.gov/apirss?cond=Systemic+Lupus+Erythematosus&aggFilters=ages%3Achild%2Cstatus%3Arec+not&in_last=60",
     },
 ]
