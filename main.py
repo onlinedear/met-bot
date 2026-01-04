@@ -342,7 +342,7 @@ def generate_ai_summary(articles: list) -> Optional[str]:
     try:
         # 配置 Gemini
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-flash-1.5")
 
         logger.info("正在调用 Gemini AI 生成总结...")
         response = model.generate_content(prompt)
