@@ -24,7 +24,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # 使用默认 token，确保有推送权限
           token: ${{ secrets.GITHUB_TOKEN }}
       
       # 2. 设置 Python 环境
@@ -48,20 +47,20 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python main.py
       
-      # 5. 提交历史记录变更
+      # 5. 提交历史记录变更 (逻辑修正版)
       - name: Commit history changes
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "GitHub Action"
           
-          # 检查是否有变更
-          if git diff --quiet history.json 2>/dev/null || [ ! -f history.json ]; then
+          # 关键修改：不管有没有变，先 Add 进去
+          git add history.json
+          
+          # 然后检查暂存区 (--staged) 是否有变化
+          if git diff --staged --quiet; then
             echo "No changes to history.json"
           else
-            git add history.json
             git commit -m "📝 Update history.json - $(date +'%Y-%m-%d %H:%M:%S')"
             git push
             echo "History updated and pushed"
           fi
-
-
