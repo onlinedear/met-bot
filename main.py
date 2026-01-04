@@ -117,6 +117,19 @@ def fetch_rss_articles(sources: list) -> list:
     """
     articles = []
 
+    # ==============================================================================
+    # 完整的浏览器伪装 Headers
+    # 作用：模拟真实 Chrome 浏览器访问，绕过 ClinicalTrials.gov 等网站的反爬虫机制
+    # ==============================================================================
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+        'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Cache-Control': 'no-cache',
+    }
+
     for source in sources:
         source_name = source.get("name", "Unknown")
         url = source.get("url", "")
@@ -129,19 +142,27 @@ def fetch_rss_articles(sources: list) -> list:
 
         try:
             # ==============================================================================
-            # 关键修改：添加 User-Agent 伪装
-            # 作用：模拟 Chrome 浏览器访问，防止 ClinicalTrials.gov 返回 403/404 错误
+            # 步骤1: 使用 requests 下载 RSS 内容
+            # 优势：比 feedparser 直接请求更灵活，可以完整控制 headers 和错误处理
             # ==============================================================================
-            user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            
-            # 使用 agent 参数发送请求
-            feed = feedparser.parse(url, agent=user_agent)
+            response = requests.get(url, headers=headers, timeout=30)
+
+            # 步骤2: 检查 HTTP 状态码，捕获 403/404 等错误
+            response.raise_for_status()
+
+            logger.info(f"成功下载 '{source_name}'，状态码: {response.status_code}，内容长度: {len(response.content)} bytes")
+
+            # ==============================================================================
+            # 步骤3: 使用 feedparser 解析下载到的二进制内容
+            # 注意：使用 response.content (bytes) 而不是 response.text (str)
+            # feedparser 可以自动处理编码问题
+            # ==============================================================================
+            feed = feedparser.parse(response.content)
 
             # 错误检查逻辑
             if feed.bozo and feed.bozo_exception:
                 # 某些 XML 可能有轻微格式问题但不影响读取，这里做记录
-                # 如果是因为被拦截，这里通常会报 SAXParseException
-                logger.warning(f"解析 '{source_name}' 时收到警告 (可能是网络拦截或格式问题): {feed.bozo_exception}")
+                logger.warning(f"解析 '{source_name}' 时收到警告 (可能是格式问题): {feed.bozo_exception}")
 
             for entry in feed.entries:
                 # 生成唯一ID (优先使用id，否则使用link)
@@ -162,8 +183,21 @@ def fetch_rss_articles(sources: list) -> list:
 
             logger.info(f"从 '{source_name}' 获取了 {len(feed.entries)} 篇文章")
 
+        except requests.exceptions.HTTPError as e:
+            # 捕获 403/404/500 等 HTTP 错误
+            logger.error(f"获取 '{source_name}' 失败 - HTTP错误: {e.response.status_code} {e.response.reason}")
+            continue
+        except requests.exceptions.Timeout:
+            logger.error(f"获取 '{source_name}' 失败 - 请求超时 (30秒)")
+            continue
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"获取 '{source_name}' 失败 - 连接错误: {e}")
+            continue
+        except requests.exceptions.RequestException as e:
+            logger.error(f"获取 '{source_name}' 失败 - 请求异常: {e}")
+            continue
         except Exception as e:
-            logger.error(f"获取 '{source_name}' 失败: {e}")
+            logger.error(f"获取 '{source_name}' 失败 - 未知错误: {e}")
             continue
 
     return articles
