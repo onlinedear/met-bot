@@ -50,6 +50,29 @@ RSS_SOURCES = [
         # 搜索关键词：SLE (Condition) + Child (Term)
         "url": "https://clinicaltrials.gov/api/rss?cond=Systemic+Lupus+Erythematosus&term=Child",
     },
+    # ============================================================
+    # --- 2. 顶级期刊 (增加了 ?filter=... 参数) ---
+    # 逻辑：只有标题或简介里含有 Lupus(狼疮) 或 SLE 的文章才会被抓取
+    {
+        "name": "NEJM (新英格兰医学杂志 - 狼疮相关)",
+        "url": "https://rsshub.app/nejm/toc/nejm?filter=Lupus|SLE|Systemic%20Lupus",
+    },
+    {
+        "name": "The Lancet (柳叶刀 - 狼疮相关)",
+        "url": "https://rsshub.app/lancet/toc/lancet?filter=Lupus|SLE|Systemic%20Lupus",
+    },
+    {
+        "name": "Nature Medicine (狼疮相关)",
+        "url": "https://rsshub.app/nature/journal/nm?filter=Lupus|SLE|Systemic%20Lupus",
+    },
+
+    # --- 3. 风湿免疫顶刊 (范围稍微放宽) ---
+    {
+        "name": "Annals of the Rheumatic Diseases (ARD)",
+        # ARD 本身就是风湿刊，我们可以不过滤(看全科动态)，或者也只看狼疮
+        # 下面演示的是只看狼疮 (如想看所有风湿动态，把 ?filter... 删掉即可)
+        "url": "https://rsshub.app/bmj/journals/ard?filter=Lupus|SLE|Systemic%20Lupus|Autoimmune",
+    }
 ]
 
 # 历史记录文件路径
