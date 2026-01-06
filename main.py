@@ -279,7 +279,10 @@ def main():
     
     history = load_history()
     all_articles = fetch_rss_articles(RSS_SOURCES)
-    new_articles = [a for a in all_articles if a["id"] not in history]
+    
+    # ⚠️ 强制模式：无视历史记录，强制发送所有文章（测试用）
+    new_articles = all_articles 
+    # new_articles = [a for a in all_articles if a["id"] not in history] # 原代码先注释掉
     
     if not new_articles:
         logger.info("无新文章")
