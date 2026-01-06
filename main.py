@@ -1,28 +1,42 @@
 # filename: main.py
 """
-医疗情报自动收集与推送机器人
+医疗情报自动收集与推送机器人 (v3.0 多模型版)
 功能: 从RSS源获取医学文献，使用AI总结，推送到Telegram
+支持: Gemini, DeepSeek, 豆包(Doubao), 通义千问(Qwen)
 """
 
 import os
 import json
 import logging
 import time
+import re
 from datetime import datetime
 from typing import Optional
 
 import feedparser
 import requests
 import google.generativeai as genai
+from openai import OpenAI
 
 # ============================================================
 # 配置区域
 # ============================================================
 
-# 从环境变量读取敏感配置
+# Telegram 配置
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+# AI 提供商选择: gemini, deepseek, doubao, qwen
+AI_PROVIDER = os.environ.get("AI_PROVIDER", "gemini").lower()
+
+# 各 AI 提供商的 API Key
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
+DOUBAO_API_KEY = os.environ.get("DOUBAO_API_KEY", "")
+QWEN_API_KEY = os.environ.get("QWEN_API_KEY", "")
+
+# 自定义模型名称 (可选，用于指定具体模型或豆包的接入点ID)
+AI_MODEL_NAME = os.environ.get("AI_MODEL_NAME", "")
 
 # RSS 源列表
 RSS_SOURCES = [
@@ -34,7 +48,6 @@ RSS_SOURCES = [
     {
         "name": "ClinicalTrials - Pediatric Lupus",
         # 搜索关键词：SLE (Condition) + Child (Term)
-        # 移除了容易报错的时间过滤器，依靠 robots 自身的 history 去重
         "url": "https://clinicaltrials.gov/api/rss?cond=Systemic+Lupus+Erythematosus&term=Child",
     },
 ]
@@ -153,35 +166,40 @@ def filter_new_articles(articles: list, history: set) -> list:
     return new_articles
 
 # ============================================================
-# AI 总结 (自动寻找最佳模型)
+# AI 总结 (多模型支持)
 # ============================================================
 
-def generate_ai_summary(articles: list) -> Optional[str]:
-    """使用 Gemini AI 生成总结，自动适配可用模型"""
-    if not GEMINI_API_KEY or not articles: return None
-
-    # 构建 Prompt
+def build_prompt(articles: list) -> str:
+    """构建发送给 AI 的 Prompt"""
     articles_text = ""
     for i, article in enumerate(articles, 1):
         articles_text += f"\n--- 文章 {i} ---\n标题: {article['title']}\n摘要: {article['summary'][:500]}...\n链接: {article['link']}\n"
 
     prompt = f"""你是一个风湿免疫科专家，请将以下关于"儿童红斑狼疮"的最新文献整理成中文日报。
+
 日期: {datetime.now().strftime('%Y-%m-%d')}
+
 要求：
 1. 分为【重磅】、【临床】、【基础】三类。
 2. 每个条目包含：中文标题、一句话通俗解读、原文链接。
 3. 保持专业且易读。
+4. 重要：请不要在输出中使用不闭合的 Markdown 符号（如单个 * 或 _），尽量避免使用复杂的格式，使用纯文本或简单的 emoji 即可。
 
 待处理文献：
 {articles_text}
 """
+    return prompt
+
+
+def generate_with_gemini(prompt: str) -> Optional[str]:
+    """使用 Google Gemini 生成总结"""
+    if not GEMINI_API_KEY:
+        logger.error("未配置 GEMINI_API_KEY")
+        return None
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
         
-        # ------------------------------------------------------
-        # 智能模型选择逻辑
-        # ------------------------------------------------------
         logger.info("正在自动选择最佳 Gemini 模型...")
         available_models = []
         try:
@@ -192,40 +210,181 @@ def generate_ai_summary(articles: list) -> Optional[str]:
             logger.warning(f"无法列出模型，尝试使用默认值: {e}")
 
         # 默认回退模型
-        model_name = "models/gemini-pro" 
+        model_name = AI_MODEL_NAME if AI_MODEL_NAME else "models/gemini-pro"
         
         # 优先选择策略：Flash > Pro > 其他
-        if available_models:
-            # 你的环境里有 gemini-2.5-flash，优先找它
+        if available_models and not AI_MODEL_NAME:
             flash_models = [m for m in available_models if 'flash' in m]
             pro_models = [m for m in available_models if 'pro' in m]
             
             if flash_models:
-                model_name = flash_models[0] # 选最新的Flash
+                model_name = flash_models[0]
             elif pro_models:
                 model_name = pro_models[0]
         
-        logger.info(f"已选择模型: {model_name}")
+        logger.info(f"已选择 Gemini 模型: {model_name}")
         model = genai.GenerativeModel(model_name)
         
         response = model.generate_content(prompt)
         if response and response.text:
-            logger.info("AI总结生成成功")
+            logger.info("Gemini 总结生成成功")
             return response.text
             
     except Exception as e:
-        logger.error(f"AI总结失败: {e}")
-        return None
-
+        logger.error(f"Gemini 总结失败: {e}")
+    
     return None
+
+
+def generate_with_openai_compatible(prompt: str, provider: str) -> Optional[str]:
+    """
+    使用 OpenAI 兼容模式调用 DeepSeek / 豆包 / 通义千问
+    
+    Args:
+        prompt: 要发送的提示词
+        provider: 提供商名称 (deepseek, doubao, qwen)
+    
+    Returns:
+        生成的文本，失败返回 None
+    """
+    # 根据提供商配置 base_url, api_key, default_model
+    config = {
+        "deepseek": {
+            "base_url": "https://api.deepseek.com",
+            "api_key": DEEPSEEK_API_KEY,
+            "default_model": "deepseek-chat",
+        },
+        "doubao": {
+            "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+            "api_key": DOUBAO_API_KEY,
+            "default_model": "",  # 豆包必须通过 AI_MODEL_NAME 指定接入点ID
+        },
+        "qwen": {
+            "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "api_key": QWEN_API_KEY,
+            "default_model": "qwen-plus",
+        },
+    }
+    
+    if provider not in config:
+        logger.error(f"未知的 AI 提供商: {provider}")
+        return None
+    
+    cfg = config[provider]
+    api_key = cfg["api_key"]
+    base_url = cfg["base_url"]
+    model_name = AI_MODEL_NAME if AI_MODEL_NAME else cfg["default_model"]
+    
+    if not api_key:
+        logger.error(f"未配置 {provider.upper()}_API_KEY")
+        return None
+    
+    if not model_name:
+        logger.error(f"使用 {provider} 时必须通过 AI_MODEL_NAME 环境变量指定模型/接入点ID")
+        return None
+    
+    logger.info(f"正在调用 {provider.upper()} API (模型: {model_name})...")
+    
+    try:
+        client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+        )
+        
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": "你是一个专业的风湿免疫科医学文献助手。"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=4096,
+        )
+        
+        if response and response.choices and response.choices[0].message:
+            result = response.choices[0].message.content
+            logger.info(f"{provider.upper()} 总结生成成功")
+            return result
+            
+    except Exception as e:
+        logger.error(f"{provider.upper()} 总结失败: {e}")
+    
+    return None
+
+
+def generate_ai_summary(articles: list) -> Optional[str]:
+    """
+    根据 AI_PROVIDER 配置调用对应的 AI 服务生成总结
+    
+    支持的提供商:
+    - gemini: Google Gemini (默认)
+    - deepseek: DeepSeek
+    - doubao: 字节跳动豆包
+    - qwen: 阿里通义千问
+    """
+    if not articles:
+        logger.info("没有新文章，无需AI总结")
+        return None
+    
+    prompt = build_prompt(articles)
+    
+    logger.info(f"当前 AI 提供商: {AI_PROVIDER.upper()}")
+    
+    if AI_PROVIDER == "gemini":
+        return generate_with_gemini(prompt)
+    elif AI_PROVIDER in ["deepseek", "doubao", "qwen"]:
+        return generate_with_openai_compatible(prompt, AI_PROVIDER)
+    else:
+        logger.error(f"不支持的 AI 提供商: {AI_PROVIDER}，支持的值: gemini, deepseek, doubao, qwen")
+        return None
 
 # ============================================================
 # Telegram 推送 (防报错增强版)
 # ============================================================
 
+def escape_markdown(text: str) -> str:
+    """
+    转义 Telegram Markdown 中的特殊字符，防止解析错误
+    主要处理不成对的 * _ ` [ 等符号
+    """
+    # 简单策略：将可能导致问题的单个特殊字符转义
+    # 但保留 emoji 和基本格式
+    
+    # 检测并修复不成对的 * 和 _
+    def fix_unpaired(text: str, char: str) -> str:
+        count = text.count(char)
+        if count % 2 != 0:
+            # 奇数个，说明有不成对的，全部转义
+            text = text.replace(char, '\\' + char)
+        return text
+    
+    text = fix_unpaired(text, '*')
+    text = fix_unpaired(text, '_')
+    text = fix_unpaired(text, '`')
+    
+    # 转义 [ 但不转义已经正确闭合的链接格式
+    # 简单处理：如果 [ 后面没有对应的 ]( 则转义
+    result = []
+    i = 0
+    while i < len(text):
+        if text[i] == '[':
+            # 查找是否是有效的链接格式 [text](url)
+            close_bracket = text.find(']', i)
+            if close_bracket != -1 and close_bracket + 1 < len(text) and text[close_bracket + 1] == '(':
+                # 可能是有效链接，保留
+                result.append(text[i])
+            else:
+                # 不是有效链接，转义
+                result.append('\\[')
+        else:
+            result.append(text[i])
+        i += 1
+    
+    return ''.join(result)
+
+
 def send_telegram_message(text: str) -> bool:
     """发送消息到 Telegram，失败时自动降级为纯文本"""
-    # 检查配置是否存在
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID: 
         logger.error("未配置 TELEGRAM_BOT_TOKEN 或 TELEGRAM_CHAT_ID")
         return False
@@ -235,25 +394,27 @@ def send_telegram_message(text: str) -> bool:
     # 切分长消息
     max_length = 4000
     messages = []
-    while len(text) > 0:
-        if len(text) > max_length:
+    remaining = text
+    while len(remaining) > 0:
+        if len(remaining) > max_length:
             # 寻找最近的换行符切分
-            split_idx = text.rfind('\n', 0, max_length)
+            split_idx = remaining.rfind('\n', 0, max_length)
             if split_idx == -1: split_idx = max_length
-            messages.append(text[:split_idx])
-            text = text[split_idx:]
+            messages.append(remaining[:split_idx])
+            remaining = remaining[split_idx:].lstrip('\n')
         else:
-            messages.append(text)
-            text = ""
+            messages.append(remaining)
+            remaining = ""
 
     all_success = True
     for i, msg in enumerate(messages, 1):
         # -------------------------------------------------------
-        # 方案 A: 尝试 Markdown 发送 (好看)
+        # 方案 A: 尝试 Markdown 发送 (预先转义特殊字符)
         # -------------------------------------------------------
+        escaped_msg = escape_markdown(msg)
         payload = {
             "chat_id": TELEGRAM_CHAT_ID,
-            "text": msg,
+            "text": escaped_msg,
             "parse_mode": "Markdown",
             "disable_web_page_preview": True
         }
@@ -262,20 +423,23 @@ def send_telegram_message(text: str) -> bool:
             resp = requests.post(url, json=payload, timeout=30)
             if resp.status_code == 200:
                 logger.info(f"消息 {i}/{len(messages)} (Markdown) 发送成功")
-                continue # 成功，跳过下方降级逻辑
+                continue
             else:
                 logger.warning(f"消息 {i} Markdown 发送失败 ({resp.text})，尝试纯文本重发...")
         except Exception as e:
             logger.warning(f"消息 {i} 网络异常: {e}")
 
         # -------------------------------------------------------
-        # 方案 B: 降级为纯文本发送 (保底修复版)
+        # 方案 B: 降级为纯文本发送 (保底)
         # -------------------------------------------------------
-        # 关键修改：使用 pop 彻底移除 parse_mode 字段，而不是设为 None
-        payload.pop("parse_mode", None) 
+        payload_plain = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": msg,  # 使用原始消息，不转义
+            "disable_web_page_preview": True
+        }
         
         try:
-            resp = requests.post(url, json=payload, timeout=30)
+            resp = requests.post(url, json=payload_plain, timeout=30)
             if resp.status_code == 200:
                 logger.info(f"消息 {i}/{len(messages)} (纯文本) 发送成功")
             else:
@@ -293,7 +457,8 @@ def send_telegram_message(text: str) -> bool:
 
 def main():
     logger.info("=" * 50)
-    logger.info("医疗情报收集机器人启动 (v2.0 Final)")
+    logger.info("医疗情报收集机器人启动 (v3.0 多模型版)")
+    logger.info(f"当前 AI 提供商: {AI_PROVIDER.upper()}")
     logger.info("=" * 50)
 
     # 1. 加载历史
@@ -317,7 +482,8 @@ def main():
         send_telegram_message(summary)
     else:
         # AI 失败时的备选方案
-        fallback = f"新文献通知 (AI生成失败):\n" + "\n".join([f"• {a['title']}\n{a['link']}" for a in new_articles[:5]])
+        fallback = f"📅 {datetime.now().strftime('%Y-%m-%d')} 新文献通知 (AI生成失败)\n\n"
+        fallback += "\n".join([f"• {a['title']}\n  {a['link']}" for a in new_articles[:5]])
         send_telegram_message(fallback)
 
     # 6. 保存历史 (标记为已读)
