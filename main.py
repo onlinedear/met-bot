@@ -45,6 +45,12 @@ RSS_SOURCES = [
         # 搜索关键词：Systemic Lupus Erythematosus AND Child
         "url": "https://pubmed.ncbi.nlm.nih.gov/rss/search/14_xQ7JEOWXDuopaPahtu8vYOV9ttMUxoq8IeKOLBpA7Zak9UG/?limit=15&utm_campaign=pubmed-2&fc=20260103215413",
     },
+    # --- 2. 抓大鱼：只看顶级期刊上的红斑狼疮研究 ---
+    {
+        "name": "Top Journals (NEJM/Lancet/Nature/ARD)",
+        # 👇 请把你刚才在 PubMed 生成的新链接贴在下面引号里
+        "url": "https://pubmed.ncbi.nlm.nih.gov/rss/search/1houoX_LGC3Y5rpUnbir5VljX_fEj1HoolaYuUt4RMxsPBbkIL/?limit=15&utm_campaign=pubmed-2&fc=20260106101820", 
+    },
     {
         "name": "ClinicalTrials - Pediatric Lupus",
         # 搜索关键词：SLE (Condition) + Child (Term)
