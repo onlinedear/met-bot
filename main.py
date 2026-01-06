@@ -196,22 +196,46 @@ def save_history(history: set) -> None:
 def fetch_rss_articles(sources: list) -> list:
     articles = []
     session = requests.Session()
+    
+    # 🕵️‍♂️ 强力伪装：模拟真实的 Chrome 浏览器
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+    }
+    
     for source in sources:
+        url = source.get("url")
+        logger.info(f"正在连接: {source['name']} ...")
+        
         try:
-            url = source.get("url")
-            headers = {'User-Agent': 'Mozilla/5.0'} 
-            resp = session.get(url, headers=headers, timeout=30)
-            feed = feedparser.parse(resp.content)
-            for entry in feed.entries:
-                articles.append({
-                    "id": entry.get("id") or entry.get("link"),
-                    "title": entry.get("title", ""),
-                    "link": entry.get("link", ""),
-                    "summary": entry.get("summary", ""),
-                    "source": source.get("name")
-                })
+            # 增加超时时间到 60秒
+            resp = session.get(url, headers=headers, timeout=60)
+            
+            # 🔍 关键调试日志：告诉我们对方服务器到底返回了什么
+            if resp.status_code == 200:
+                feed = feedparser.parse(resp.content)
+                if feed.entries:
+                    logger.info(f" -> ✅ 成功抓取 {len(feed.entries)} 篇文章")
+                    for entry in feed.entries:
+                        articles.append({
+                            "id": entry.get("id") or entry.get("link"),
+                            "title": entry.get("title", ""),
+                            "link": entry.get("link", ""),
+                            "summary": entry.get("summary", ""),
+                            "source": source.get("name")
+                        })
+                else:
+                    logger.warning(f" -> ⚠️ 连接成功(200)但内容为空。可能链接已失效，或返回了非RSS格式。")
+                    logger.info(f" -> 页面前50个字符: {resp.text[:50]}") # 看看是不是报错页面
+            else:
+                logger.error(f" -> ❌ 抓取失败，状态码: {resp.status_code} (可能是IP被封锁)")
+                
         except Exception as e:
-            logger.error(f"RSS error: {e}")
+            logger.error(f" -> 💥 网络错误: {e}")
+            
     return articles
 
 def send_telegram_message(text: str) -> bool:
