@@ -95,8 +95,8 @@
 ### 🐧 QQ 邮箱 (推荐)
 1.  电脑登录 [mail.qq.com](https://mail.qq.com)。
 2.  点击左上角 **【设置】** -> 选择 **【账户】**。
-3.  向下滚动找到 **“POP3/IMAP/SMTP...服务”**。
-4.  点击 **POP3/SMTP服务** 右侧的 **【开启】**。
+3.  向下滚动找到 **“账号与安全-安全”**。
+4.  点击 **POP3/IMAP/SMTP/Exchange/CardDAV 服务** 右侧的 **【开启】**。
 5.  按提示用手机发送短信验证。
 6.  复制弹出的 **16位授权码** (这就是 `EMAIL_PASSWORD`)。
     * *Secret 提示：`SMTP_SERVER` 填 `smtp.qq.com`，`SMTP_PORT` 填 `587`*
