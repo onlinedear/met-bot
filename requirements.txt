@@ -1,0 +1,14 @@
+# filename: requirements.txt
+# 医疗情报自动收集与推送机器人依赖
+
+# RSS 解析库
+feedparser>=6.0.10
+
+# HTTP 请求库
+requests>=2.31.0
+
+# AI SDK (支持 DeepSeek, 豆包, 通义千问等 OpenAI 兼容接口)
+openai>=1.0.0
+
+# Google Gemini AI SDK (仅在使用 Gemini 时需要)
+# google-generativeai>=0.8.3

@@ -1,0 +1,80 @@
+# filename: .github/workflows/daily.yml
+# 医疗情报自动收集与推送机器人 - GitHub Actions 配置
+
+name: 红斑狼疮最新医疗情报日报
+
+on:
+  # 每天北京时间 07:30 = UTC 23:30 (前一天)
+  schedule:
+    - cron: '30 23 * * *'
+  
+  # 支持手动触发
+  workflow_dispatch:
+
+# 权限设置：需要写入权限来提交 history.json
+permissions:
+  contents: write
+
+jobs:
+  collect-and-push:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      # 2. 设置 Python 环境
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      # 3. 安装依赖
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      # 4. 运行主脚本
+      - name: Run medical intelligence bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # 各种模型的 Key
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DOUBAO_API_KEY: ${{ secrets.DOUBAO_API_KEY }}
+          QWEN_API_KEY: ${{ secrets.QWEN_API_KEY }}  # <--- 新增这行
+          # 开关
+          AI_PROVIDER: ${{ secrets.AI_PROVIDER }} 
+          AI_MODEL_NAME: ${{ secrets.AI_MODEL_NAME }}
+          SUMMARY_LANGUAGE: ${{ secrets.SUMMARY_LANGUAGE }}
+          # 邮箱配置
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
+        run: python main.py
+      
+      # 5. 提交历史记录变更 (逻辑修正版)
+      - name: Commit history changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "GitHub Action"
+          
+          # 关键修改：不管有没有变，先 Add 进去
+          git add history.json
+          
+          # 然后检查暂存区 (--staged) 是否有变化
+          if git diff --staged --quiet; then
+            echo "No changes to history.json"
+          else
+            git commit -m "📝 Update history.json - $(date +'%Y-%m-%d %H:%M:%S')"
+            git push
+            echo "History updated and pushed"
+          fi
