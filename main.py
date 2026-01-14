@@ -527,29 +527,42 @@ def send_telegram_message(text: str) -> bool:
         return False
 
     # 清理 AI 可能生成的多余前缀
-    text = text.strip()
-    lines = text.split('\n')
+    original_text = text.strip()
+    lines = original_text.split('\n')
     cleaned_lines = []
-    skip_first_lines = True
+    found_content = False
     
     for line in lines:
-        # 跳过开头的客套话
-        if skip_first_lines:
+        # 如果已经找到实质内容，后续所有行都保留
+        if found_content:
+            cleaned_lines.append(line)
+            continue
+        
+        # 跳过开头的空行
+        if not line.strip():
+            continue
+        
+        # 检查是否是客套话（只检查前3行）
+        if len(cleaned_lines) < 3:
             if any(prefix in line for prefix in [
-                "好的", "明白", "收到", "作为", "我已", "我为您", "为您整理",
-                "okay", "sure", "as a", "i have", "here is"
+                "好的，", "明白了，", "收到，", "作为风湿", "我已为您", "为您整理好",
+                "okay,", "sure,", "as a", "i have prepared", "here is your"
             ]):
                 continue
             # 跳过开头的分隔线
             if line.strip() in ["---", "***", "===", "___"]:
                 continue
-            # 遇到实质内容后停止跳过
-            if line.strip() and not line.startswith('#'):
-                skip_first_lines = False
         
+        # 找到实质内容
+        found_content = True
         cleaned_lines.append(line)
     
     text = '\n'.join(cleaned_lines).strip()
+    
+    # 如果清理后内容为空，使用原始内容
+    if not text:
+        logger.warning("Telegram 消息清理后为空，使用原始内容")
+        text = original_text
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
@@ -638,32 +651,44 @@ def send_email(subject: str, content: str) -> bool:
 
     try:
         # 清理 AI 可能生成的多余前缀
-        content = content.strip()
+        original_content = content.strip()
         
-        # 移除常见的 AI 回复前缀（更激进的清理）
-        lines = content.split('\n')
+        # 移除常见的 AI 回复前缀（更温和的清理）
+        lines = original_content.split('\n')
         cleaned_lines = []
-        skip_first_lines = True
+        found_content = False
         
         for line in lines:
-            line_lower = line.lower().strip()
-            # 跳过开头的客套话
-            if skip_first_lines:
+            # 如果已经找到实质内容，后续所有行都保留
+            if found_content:
+                cleaned_lines.append(line)
+                continue
+            
+            # 跳过开头的空行
+            if not line.strip():
+                continue
+            
+            # 检查是否是客套话（只检查前3行）
+            if len(cleaned_lines) < 3:
                 if any(prefix in line for prefix in [
-                    "好的", "明白", "收到", "作为", "我已", "我为您", "为您整理",
-                    "okay", "sure", "as a", "i have", "here is"
+                    "好的，", "明白了，", "收到，", "作为风湿", "我已为您", "为您整理好",
+                    "okay,", "sure,", "as a", "i have prepared", "here is your"
                 ]):
                     continue
                 # 跳过开头的分隔线
                 if line.strip() in ["---", "***", "===", "___"]:
                     continue
-                # 遇到实质内容后停止跳过
-                if line.strip() and not line.startswith('#'):
-                    skip_first_lines = False
             
+            # 找到实质内容
+            found_content = True
             cleaned_lines.append(line)
         
         content = '\n'.join(cleaned_lines).strip()
+        
+        # 如果清理后内容为空，使用原始内容（防止过度清理）
+        if not content:
+            logger.warning("内容清理后为空，使用原始内容")
+            content = original_content
         
         # 添加底部签名
         content += "\n\n" + "=" * 50
