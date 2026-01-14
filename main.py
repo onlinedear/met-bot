@@ -63,19 +63,19 @@ EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "")
 # --- RSS 源列表 ---
 RSS_SOURCES = [
     {
-        "name": "PubMed - Pediatric SLE",
-        # 搜索关键词: Systemic Lupus Erythematosus AND Child
-        "url": "https://pubmed.ncbi.nlm.nih.gov/rss/search/14_xQ7JEOWXDuopaPahtu8vYOV9ttMUxoq8IeKOLBpA7Zak9UG/?limit=15&utm_campaign=pubmed-2&fc=20260103215413",
+        "name": "PubMed - Juvenile dermatomyositis",
+        # 搜索关键词: Juvenile dermatomyositis
+        "url": "https://pubmed.ncbi.nlm.nih.gov/rss/search/1JGmIQAFk1rxWD4W_558cjBPZyqMWRKUpzAS7y3qb3IqRgc1bN/?limit=15&utm_campaign=pubmed-2&fc=20260114061049",
     },
     {
         "name": "Top Journals (NEJM/Lancet/Nature/ARD)",
-        # 顶级期刊红斑狼疮研究
-        "url": "https://pubmed.ncbi.nlm.nih.gov/rss/search/1houoX_LGC3Y5rpUnbir5VljX_fEj1HoolaYuUt4RMxsPBbkIL/?limit=15&utm_campaign=pubmed-2&fc=20260106101820",
+        # 顶级期刊Juvenile dermatomyositis研究
+        "url": "https://pubmed.ncbi.nlm.nih.gov/rss/search/1LIK-026Y9bjRE4SDS2o3ARMa8UZg8ArJNBPGmCuzbIoGkqAh-/?limit=15&utm_campaign=pubmed-2&fc=20260114061431",
     },
     {
-        "name": "ClinicalTrials - Pediatric Lupus",
-        # 搜索关键词: SLE (Condition) + Child (Term)
-        "url": "https://clinicaltrials.gov/api/rss?cond=Systemic+Lupus+Erythematosus&term=Child",
+        "name": "ClinicalTrials - Juvenile dermatomyositis",
+        # 搜索关键词: Juvenile dermatomyositis
+        "url": "https://clinicaltrials.gov/api/rss?cond=Juvenile+dermatomyositis",
     },
 ]
 
@@ -269,7 +269,7 @@ Articles to process:
 """
     else:
         # 默认中文
-        prompt = f"""你是一个风湿免疫科专家，请将以下关于"儿童红斑狼疮"的最新文献整理成中文日报。
+        prompt = f"""你是一个风湿免疫科专家，请将以下关于"幼年皮肌炎"的最新文献整理成中文日报。
 
 日期: {current_date}
 
@@ -684,7 +684,7 @@ def main():
         if SUMMARY_LANGUAGE == "EN":
             email_subject = f"Pediatric SLE Daily Digest - {datetime.now().strftime('%Y-%m-%d')}"
         else:
-            email_subject = f"红斑狼疮最新医疗信息日报 - {datetime.now().strftime('%Y-%m-%d')}"
+            email_subject = f"幼年皮肌炎最新医疗信息日报 - {datetime.now().strftime('%Y-%m-%d')}"
         send_email(email_subject, summary)
     else:
         # AI 失败时的备选方案
