@@ -54,7 +54,7 @@ SUMMARY_LANGUAGE = os.environ.get("SUMMARY_LANGUAGE", "CN").upper()
 
 # --- 邮件配置 ---
 SMTP_SERVER = os.environ.get("SMTP_SERVER", "")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
+SMTP_PORT = int(os.environ.get("SMTP_PORT") or "465")  # 修复：处理空字符串
 EMAIL_SENDER = os.environ.get("EMAIL_SENDER", "")
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "")  # 支持逗号分隔多个邮箱
