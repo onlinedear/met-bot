@@ -1,7 +1,7 @@
 # filename: .github/workflows/daily.yml
 # 医疗情报自动收集与推送机器人 - GitHub Actions 配置
 
-name: 红斑狼疮最新医疗情报日报
+name: 幼年皮肌炎医疗情报日报
 
 on:
   # 每天北京时间 07:30 = UTC 23:30 (前一天)
@@ -61,16 +61,16 @@ jobs:
           EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
         run: python main.py
       
-      # 5. 提交历史记录变更 (逻辑修正版)
+      # 5. 提交历史记录变更
       - name: Commit history changes
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "GitHub Action"
           
-          # 关键修改：不管有没有变，先 Add 进去
+          # 添加 history.json 到暂存区
           git add history.json
           
-          # 然后检查暂存区 (--staged) 是否有变化
+          # 检查暂存区是否有变化
           if git diff --staged --quiet; then
             echo "No changes to history.json"
           else
