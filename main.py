@@ -242,9 +242,11 @@ def build_prompt(articles: list) -> str:
     articles_text = ""
     for i, article in enumerate(articles, 1):
         summary_truncated = article["summary"][:500]
+        published_date = article.get("published", "Unknown date")
         articles_text += (
             f"\n--- Article {i} ---\n"
             f"Title: {article['title']}\n"
+            f"Published: {published_date}\n"
             f"Abstract: {summary_truncated}...\n"
             f"Link: {article['link']}\n"
         )
@@ -258,10 +260,19 @@ def build_prompt(articles: list) -> str:
 Date: {current_date}
 
 Requirements:
-1. Categorize into [Breaking News], [Clinical], and [Basic Research].
-2. Each entry should include: English title, a one-sentence plain-language summary, and the original link.
-3. Keep it professional yet accessible.
-4. Important: Do not use unclosed Markdown symbols (such as single * or _). Avoid complex formatting. Use plain text or simple emojis only.
+1. Start DIRECTLY with the title "Rheumatology Literature Daily | {current_date}" - NO greetings or introductions
+2. Categorize into [Breaking News], [Clinical], and [Basic Research]
+3. Each entry should include: English title, publication date, a one-sentence plain-language summary, and the original link
+4. Keep it professional yet accessible
+5. CRITICAL: Do NOT use Markdown headers (###, ##). Use plain text with emojis (🔥, 🏥, 🔬) for categories
+6. Do NOT use unclosed Markdown symbols. Use plain text formatting only
+
+Format example:
+🔥 [Breaking News]
+1. Title: ...
+   Published: 2026-01-14
+   Summary: ...
+   Link: https://...
 
 Articles to process:
 {articles_text}
@@ -273,10 +284,19 @@ Articles to process:
 日期: {current_date}
 
 要求：
-1. 分为【重磅】、【临床】、【基础】三类。
-2. 每个条目包含：中文标题、一句话通俗解读、原文链接。
-3. 保持专业且易读。
-4. 重要：请不要在输出中使用不闭合的 Markdown 符号（如单个 * 或 _），尽量避免使用复杂的格式，使用纯文本或简单的 emoji 即可。
+1. 直接以标题开始："风湿免疫科文献日报 | {current_date}"，不要任何问候语或前缀（如"好的"、"作为专家"等）
+2. 分为【重磅】、【临床】、【基础】三类
+3. 每个条目包含：中文标题、发表日期、一句话通俗解读、原文链接
+4. 保持专业且易读
+5. 关键：不要使用 Markdown 标题符号（###、##），使用纯文本加 emoji（🔥、🏥、🔬）来标记分类
+6. 不要使用不闭合的 Markdown 符号，只使用纯文本格式
+
+格式示例：
+🔥 【重磅】
+1. 中文标题：...
+   发表日期：2026-01-14
+   通俗解读：...
+   原文链接：https://...
 
 待处理文献：
 {articles_text}
@@ -506,6 +526,31 @@ def send_telegram_message(text: str) -> bool:
         logger.error("未配置 TELEGRAM_BOT_TOKEN 或 TELEGRAM_CHAT_ID")
         return False
 
+    # 清理 AI 可能生成的多余前缀
+    text = text.strip()
+    lines = text.split('\n')
+    cleaned_lines = []
+    skip_first_lines = True
+    
+    for line in lines:
+        # 跳过开头的客套话
+        if skip_first_lines:
+            if any(prefix in line for prefix in [
+                "好的", "明白", "收到", "作为", "我已", "我为您", "为您整理",
+                "okay", "sure", "as a", "i have", "here is"
+            ]):
+                continue
+            # 跳过开头的分隔线
+            if line.strip() in ["---", "***", "===", "___"]:
+                continue
+            # 遇到实质内容后停止跳过
+            if line.strip() and not line.startswith('#'):
+                skip_first_lines = False
+        
+        cleaned_lines.append(line)
+    
+    text = '\n'.join(cleaned_lines).strip()
+
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
     # 切分长消息 (Telegram 单条消息限制 4096 字符)
@@ -594,36 +639,36 @@ def send_email(subject: str, content: str) -> bool:
     try:
         # 清理 AI 可能生成的多余前缀
         content = content.strip()
-        # 移除常见的 AI 回复前缀
-        prefixes_to_remove = [
-            "好的，",
-            "好的。",
-            "明白了，",
-            "收到，",
-            "作为风湿免疫科专家，",
-            "我已将今日",
-            "我已经整理了",
-        ]
-        for prefix in prefixes_to_remove:
-            if content.startswith(prefix):
-                # 找到第一个句号或换行后的内容
-                first_break = content.find("\n")
-                if first_break > 0 and first_break < 100:
-                    content = content[first_break:].strip()
-                    break
         
-        # 移除开头的分隔线
-        while content.startswith("---") or content.startswith("***"):
-            first_line_end = content.find("\n")
-            if first_line_end > 0:
-                content = content[first_line_end + 1:].strip()
-            else:
-                break
+        # 移除常见的 AI 回复前缀（更激进的清理）
+        lines = content.split('\n')
+        cleaned_lines = []
+        skip_first_lines = True
+        
+        for line in lines:
+            line_lower = line.lower().strip()
+            # 跳过开头的客套话
+            if skip_first_lines:
+                if any(prefix in line for prefix in [
+                    "好的", "明白", "收到", "作为", "我已", "我为您", "为您整理",
+                    "okay", "sure", "as a", "i have", "here is"
+                ]):
+                    continue
+                # 跳过开头的分隔线
+                if line.strip() in ["---", "***", "===", "___"]:
+                    continue
+                # 遇到实质内容后停止跳过
+                if line.strip() and not line.startswith('#'):
+                    skip_first_lines = False
+            
+            cleaned_lines.append(line)
+        
+        content = '\n'.join(cleaned_lines).strip()
         
         # 添加底部签名
         content += "\n\n" + "=" * 50
         content += "\n本邮件由医疗情报自动收集机器人生成"
-        content += "\nAI 总结由 DeepSeek 提供"
+        content += f"\nAI 总结由 {AI_PROVIDER.upper()} 提供"
         content += "\n" + "=" * 50
 
         # 创建邮件（只使用纯文本，不使用 HTML）
